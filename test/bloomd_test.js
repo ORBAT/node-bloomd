@@ -117,10 +117,12 @@ exports.reconnectsOnConnectionFailure = function (test) {
  */
 exports.connectionCbTimeout = function (test) {
   var origCreate = net.createConnection
+  var createdSocket
   net.createConnection = function() {
     console.log("sleeping for ~1 second")
     sleep(1)
-    return origCreate.apply(null, Array.prototype.slice.call(arguments))
+    createdSocket = origCreate.apply(null, Array.prototype.slice.call(arguments));
+    return createdSocket
   }
 
   bloom.createClient({connectTimeout: 1}, function (err, client) {
@@ -128,6 +130,8 @@ exports.connectionCbTimeout = function (test) {
     test.ok(!client, "no client should have been returned")
     test.ok(err, "there should be something in err")
     net.createConnection = origCreate
+    test.ok(createdSocket, "a socket was created")
+    test.ok(createdSocket.destroyed)
 //    test.equals(err.message, "callback timed out")
     test.done()
   })
