@@ -1,4 +1,5 @@
 // Copyright 2013 The Obvious Corporation
+// changes by Tom Eklöf (tom@applifier.com)
 
 var net = require('net'),
     events = require('events'),
@@ -39,7 +40,7 @@ var net = require('net'),
  * @param {Object} options
  */
 function BloomClient(stream, options) {
-  this.options = options
+  this.options = options;
   this.responseParser = new ResponseParser(this)
 
   // Connection handling
@@ -49,6 +50,10 @@ function BloomClient(stream, options) {
   this.maxConnectionAttempts = options.maxConnectionAttempts || 0
   this.reconnectDelay = options.reconnectDelay || 160
   this.reconnector = null
+
+  /* how long the asynchronous version of createClient will wait for the server before timing out. Use 0 for no
+   * timeout */
+  this.connectTimeout = options.connectTimeout || 500
 
   // Queue handling
   this.unavailable = false
@@ -793,17 +798,72 @@ function _timer(since, message) {
   return elapsed
 }
 
-// Exports
+function ensured(fn, timeout) {
+  var timer
 
+  if (!timeout)
+    return fn
+
+  var cb = function () {
+    if (timer) {
+      clearTimeout(timer)
+      fn.apply(fn, arguments)
+    }
+  }
+  timer = setTimeout(function () {
+    clearTimeout(timer)
+    timer = null
+    fn.call(fn, new Error("Timeout exceeded"))
+  }, timeout)
+  return cb
+}
+
+// Exports
+exports.ensured = ensured
 exports.BloomClient = BloomClient
 
-exports.createClient = function (options) {
+/**
+ * Creates a new bloomd client. If a callback is specified, it will be called when the connection is ready instead of
+ * blocking and returning a BloomClient instance.
+ * @see ConnectionCallback
+ * @param {object} [options] connection options
+ * @returns {BloomClient}
+ * @param {function} [cb] Called with the newly created BloomClient object
+ */
+exports.createClient = function (options, cb) {
+  var netClient
   options = options || {}
   options.host = options.host || defaultHost
   options.port = options.port || defaultPort
 
-  var netClient = net.createConnection(options.port, options.host)
-  return new BloomClient(netClient, options)
-}
+  if (!cb) {
+    netClient = net.createConnection(options.port, options.host)
+    return new BloomClient(netClient, options)
+  }
+
+  var creationCb;
+  if (!options.connectTimeout) {
+    creationCb = function () {
+      var bloomClient = new BloomClient(netClient, options);
+      // call _onConnect manually since it normally relies on the "connected" event which has already fired
+      bloomClient._onConnect()
+      cb(null, bloomClient)
+    }
+  } else {
+    creationCb = ensured(function (err) {
+      if (err) {
+        if (netClient) netClient.end()
+        cb(err, null)
+      } else {
+        var bloomClient = new BloomClient(netClient, options);
+        bloomClient._onConnect()
+        cb(null, bloomClient)
+      }
+    }, options.connectTimeout)
+  }
+
+  netClient = net.createConnection(options.port, options.host, creationCb)
+
+};
 
 exports.timer = _timer

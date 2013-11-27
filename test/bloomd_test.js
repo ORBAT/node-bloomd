@@ -5,6 +5,7 @@ var bloom = require('../index'),
   assert = require('assert'),
   spawn = require('child_process').spawn,
   sleep = require('sleep').sleep,
+  net = require('net'),
   bloomd
 
 /**
@@ -41,6 +42,34 @@ function _stopServer() {
   bloomd.kill()
   sleep(SERVER_START_STOP_TIME)
 }
+
+/**
+ * ensured wraps a callback function(err,res) with a setTimeout so that if it is not executed in the specified timeout,
+ * it is called with an Error instance in the first parameter. This test verifies that the timeout actually happens
+ */
+exports.ensuredTimeout = function(test) {
+  var ensuredFn = bloom.ensured(function(err, res){
+    test.ok(err)
+    test.equals(err.message, "Timeout exceeded")
+    test.ifError(res)
+    test.done()
+  }, 1)
+  sleep(1)
+}
+
+/**
+ * ensured wraps a callback function(err,res) with a setTimeout so that if it is not executed in the specified timeout,
+ * it is called with an Error instance in the first parameter. This test verifies that
+ */
+exports.ensuredSuccess = function(test) {
+  var ensuredFn = bloom.ensured(function(err, res){
+    test.ifError(err)
+    test.equals(res, "result")
+    test.done()
+  }, 500)
+  ensuredFn(null, "result")
+}
+
 
 /**
  * We use different named filters for each, as bloomd does not allow for the creation
@@ -83,6 +112,73 @@ exports.reconnectsOnConnectionFailure = function (test) {
   // Start the server only after all the events have been queued.
   _startServer()
 }
+/**
+ *  Test that the asynchronous version of createClient errors out when connecting takes too long
+ */
+exports.connectionCbTimeout = function (test) {
+  var origCreate = net.createConnection
+  net.createConnection = function() {
+    console.log("sleeping for ~1 second")
+    sleep(1)
+    return origCreate.apply(null, Array.prototype.slice.call(arguments))
+  }
+
+  bloom.createClient({connectTimeout: 1}, function (err, client) {
+    console.log("createClient returned err " + err + " client " + client)
+    test.ok(!client, "no client should have been returned")
+    test.ok(err, "there should be something in err")
+    net.createConnection = origCreate
+//    test.equals(err.message, "callback timed out")
+    test.done()
+  })
+}
+
+function clientTesting(client, test, filterName) {
+  filterName = filterName || "timeout_tests"
+    client.setSafe(filterName, "timeout_key", function (err, res) {
+      console.log("setSafe done, res = " + res + " err = " + err)
+      test.ifError(err);
+      test.ok(res, "timeout_key should not have existed")
+      client.check(filterName, "timeout_key", function (err, res) {
+        console.log("check done, res = " + res + " err = " + err)
+        test.ifError(err)
+        test.equals(res, true)
+        client.drop(filterName, function (err, res) {
+          console.log("drop done, res = " + res + " err = " + err)
+          test.ifError(err)
+          test.ok(res, "timeout_tests should have gotten dropped")
+          client.dispose()
+          test.done()
+        })
+      })
+    })
+}
+
+/**
+ *  Test that the asynchronous version of createClient returns a working client when a timeout is not specified
+ */
+exports.connectionCbNoTimeout = function (test) {
+  bloom.createClient({}, function (err, client) {
+    test.ifError(err)
+    test.ok(client, "a client should have been returned")
+    clientTesting(client, test, "timeout_tests")
+  })
+}
+
+/**
+ * Test that the asynchronous version of createClient returns a working client when a timeout is specified
+ */
+exports.connectionCbLongTimeout = function(test) {
+  var client
+  bloom.createClient({connectTimeout:100}, function(err, client){
+    console.log("client created")
+    test.ifError(err)
+    test.ok(client, "should have a client")
+    clientTesting(client, test, "timeout_tests2")
+  })
+}
+
+
 
 /**
  * Tests that an unavailable client rejects both queued commands
