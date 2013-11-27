@@ -1,19 +1,21 @@
 // Copyright 2013 The Obvious Corporation
 
-var bloom = require('../index'),
-  fs = require('fs'),
-  assert = require('assert'),
-  spawn = require('child_process').spawn,
-  sleep = require('sleep').sleep,
-  net = require('net'),
-  bloomd
+var bloom = require('../index')
+  , fs = require('fs')
+  , assert = require('assert')
+  , spawn = require('child_process').spawn
+  , sleep = require('sleep').sleep
+  , net = require('net')
+  , async = require('async')
+  , _ = require('lodash')
+  , bloomd
 
 /**
  * Delay in ms that we should wait after doing a drop command before issuing
  * a create command to the same filter name, due to bloomd's limitations.
  * If tests are failing, try increasing this.
  */
-var DROP_THEN_CREATE_DELAY_MS = 200
+var DROP_THEN_CREATE_DELAY_MS = 500
 
 /**
  * Delay in seconds that we should wait after starting and stopping the bloomd
@@ -182,7 +184,51 @@ exports.connectionCbLongTimeout = function(test) {
   })
 }
 
+/**
+ * Test that timeout commands return correct results
+ */
+exports.timeoutCommands = function (test) {
+  var client = bloom.createClient()
+    , filterName = "cmd_timeout_testing"
+    , keyName = "key"
+    , timeout = 10
+    , filterOpts = {prob: 0.0001, capacity: 1000, in_memory: 1}
+  //TODO: setSafeTest fails for some reason
+  var testFns = {
+    setSafeTest: function(cb) {
+      client.setSafeTimeout(filterName, keyName, function (err, res) {
+        cb(err, res)
+      }, filterOpts, timeout)
+    }
+    , checkSafeTest: function(cb) {
+      client.checkSafeTimeout(filterName, keyName, function(err,res){
+        cb(err, res)
+      }, filterOpts, timeout)
+    }
+  }
 
+  async.series(testFns, function(err,res){
+    console.dir(err)
+    console.dir(res)
+    var results = _.values(res).every(function(elem){return !!elem})
+    test.ok(results, "all tests should have returned true: " + _.values(res).join(', '))
+    client.dispose()
+    test.done()
+  })
+
+
+
+/*  client.create(filterName, filterOpts, function(err, res){
+    test.ifError(err)
+
+    client.drop(filterName, function(err,res){
+      test.ifError(err)
+      client.dispose()
+      test.ok(false, "TODO")
+      test.done()
+    })
+  })*/
+}
 
 /**
  * Tests that an unavailable client rejects both queued commands
