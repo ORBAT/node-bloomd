@@ -719,7 +719,7 @@ BloomClient.prototype._clearFilterQueue = function (filterName) {
  * failure, not the original 'filter not found', to help track down why the creation
  * would be failing.
  *
- * @param {string} command
+ * @param {string} commandName
  * @return {Function}
  */
 function _makeSafe(commandName) {
@@ -841,10 +841,10 @@ exports.createClient = function (options, cb) {
     return new BloomClient(netClient, options)
   }
 
-  var creationCb;
+  var creationCb
   if (!options.connectTimeout) {
     creationCb = function () {
-      var bloomClient = new BloomClient(netClient, options);
+      var bloomClient = new BloomClient(netClient, options)
       // call _onConnect manually since it normally relies on the "connected" event which has already fired
       bloomClient._onConnect()
       cb(null, bloomClient)
@@ -852,10 +852,11 @@ exports.createClient = function (options, cb) {
   } else {
     creationCb = ensured(function (err) {
       if (err) {
-        if (netClient) netClient.end()
+        // if a socket was created, destroy it
+        if (netClient) netClient.destroy()
         cb(err, null)
       } else {
-        var bloomClient = new BloomClient(netClient, options);
+        var bloomClient = new BloomClient(netClient, options)
         bloomClient._onConnect()
         cb(null, bloomClient)
       }
@@ -864,6 +865,6 @@ exports.createClient = function (options, cb) {
 
   netClient = net.createConnection(options.port, options.host, creationCb)
 
-};
+}
 
 exports.timer = _timer
