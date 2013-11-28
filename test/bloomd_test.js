@@ -185,15 +185,15 @@ exports.connectionCbLongTimeout = function(test) {
 }
 
 /**
- * Test that timeout commands return correct results
+ * Test that timeout commands return correct results when they don't time out
  */
 exports.timeoutCommands = function (test) {
   var client = bloom.createClient()
     , filterName = "cmd_timeout_testing"
     , keyName = "key"
     , timeout = 10
-    , filterOpts = {prob: 0.0001, capacity: 1000, in_memory: 1}
-  //TODO: setSafeTest fails for some reason
+    , filterOpts = {prob: 0.0001, capacity: 100000, in_memory:1}
+
   var testFns = {
     setSafeTest: function(cb) {
       client.setSafeTimeout(filterName, keyName, function (err, res) {
@@ -205,29 +205,52 @@ exports.timeoutCommands = function (test) {
         cb(err, res)
       }, filterOpts, timeout)
     }
+    , setTest: function(cb) {
+      client.setTimeout(filterName, keyName+"1", function(err,res){
+        cb(err, res)
+      }, timeout)
+    }
+    , checkTest: function(cb) {
+      client.checkTimeout(filterName, keyName+"1", function(err,res){
+        cb(err, res)
+      }, timeout)
+    }
+    , checkTest2: function(cb) {
+      client.checkTimeout(filterName, keyName+"2",function(err,res){
+        cb(err, !res) // the key shouldn't exist
+      }, timeout)
+    }
   }
 
-  async.series(testFns, function(err,res){
+  async.series(testFns, function (err, res) {
     console.dir(err)
     console.dir(res)
-    var results = _.values(res).every(function(elem){return !!elem})
+    test.ifError(err);
+    var results = _.values(res).every(function (elem) {return !!elem})
     test.ok(results, "all tests should have returned true: " + _.values(res).join(', '))
     client.dispose()
     test.done()
   })
+}
 
+/**
+ * Test that timeouts happen properly
+ */
+exports.timeout = function(test) {
+  var client = bloom.createClient()
+    , filterName = "cmd_timeout_testing2"
+    , keyName = "key"
+    , timeout = 1
+    , filterOpts = {prob: 0.0001, capacity: 100000, in_memory:1}
 
+  var startTime = process.hrtime()
+  client.setSafeTimeout(filterName, keyName, function(err,res){
+    test.equals(err && err.message, "Timeout exceeded", "should have timed out")
+    bloom.timer(startTime, "Timed out after ")
+    client.dispose()
+    test.done()
+  }, filterOpts, timeout)
 
-/*  client.create(filterName, filterOpts, function(err, res){
-    test.ifError(err)
-
-    client.drop(filterName, function(err,res){
-      test.ifError(err)
-      client.dispose()
-      test.ok(false, "TODO")
-      test.done()
-    })
-  })*/
 }
 
 /**
