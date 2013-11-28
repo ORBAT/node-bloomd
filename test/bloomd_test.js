@@ -1,19 +1,21 @@
 // Copyright 2013 The Obvious Corporation
 
-var bloom = require('../index'),
-  fs = require('fs'),
-  assert = require('assert'),
-  spawn = require('child_process').spawn,
-  sleep = require('sleep').sleep,
-  net = require('net'),
-  bloomd
+var bloom = require('../index')
+  , fs = require('fs')
+  , assert = require('assert')
+  , spawn = require('child_process').spawn
+  , sleep = require('sleep').sleep
+  , net = require('net')
+  , async = require('async')
+  , _ = require('lodash')
+  , bloomd
 
 /**
  * Delay in ms that we should wait after doing a drop command before issuing
  * a create command to the same filter name, due to bloomd's limitations.
  * If tests are failing, try increasing this.
  */
-var DROP_THEN_CREATE_DELAY_MS = 200
+var DROP_THEN_CREATE_DELAY_MS = 500
 
 /**
  * Delay in seconds that we should wait after starting and stopping the bloomd
@@ -117,10 +119,12 @@ exports.reconnectsOnConnectionFailure = function (test) {
  */
 exports.connectionCbTimeout = function (test) {
   var origCreate = net.createConnection
+  var createdSocket
   net.createConnection = function() {
     console.log("sleeping for ~1 second")
     sleep(1)
-    return origCreate.apply(null, Array.prototype.slice.call(arguments))
+    createdSocket = origCreate.apply(null, Array.prototype.slice.call(arguments));
+    return createdSocket
   }
 
   bloom.createClient({connectTimeout: 1}, function (err, client) {
@@ -128,6 +132,8 @@ exports.connectionCbTimeout = function (test) {
     test.ok(!client, "no client should have been returned")
     test.ok(err, "there should be something in err")
     net.createConnection = origCreate
+    test.ok(createdSocket, "a socket was created")
+    test.ok(createdSocket.destroyed)
 //    test.equals(err.message, "callback timed out")
     test.done()
   })
@@ -178,7 +184,74 @@ exports.connectionCbLongTimeout = function(test) {
   })
 }
 
+/**
+ * Test that timeout commands return correct results when they don't time out
+ */
+exports.timeoutCommands = function (test) {
+  var client = bloom.createClient()
+    , filterName = "cmd_timeout_testing"
+    , keyName = "key"
+    , timeout = 10
+    , filterOpts = {prob: 0.0001, capacity: 100000, in_memory:1}
 
+  var testFns = {
+    setSafeTest: function(cb) {
+      client.setSafeTimeout(filterName, keyName, function (err, res) {
+        cb(err, res)
+      }, filterOpts, timeout)
+    }
+    , checkSafeTest: function(cb) {
+      client.checkSafeTimeout(filterName, keyName, function(err,res){
+        cb(err, res)
+      }, filterOpts, timeout)
+    }
+    , setTest: function(cb) {
+      client.setTimeout(filterName, keyName+"1", function(err,res){
+        cb(err, res)
+      }, timeout)
+    }
+    , checkTest: function(cb) {
+      client.checkTimeout(filterName, keyName+"1", function(err,res){
+        cb(err, res)
+      }, timeout)
+    }
+    , checkTest2: function(cb) {
+      client.checkTimeout(filterName, keyName+"2",function(err,res){
+        cb(err, !res) // the key shouldn't exist
+      }, timeout)
+    }
+  }
+
+  async.series(testFns, function (err, res) {
+    console.dir(err)
+    console.dir(res)
+    test.ifError(err);
+    var results = _.values(res).every(function (elem) {return !!elem})
+    test.ok(results, "all tests should have returned true: " + _.values(res).join(', '))
+    client.dispose()
+    test.done()
+  })
+}
+
+/**
+ * Test that timeouts happen properly
+ */
+exports.timeout = function(test) {
+  var client = bloom.createClient()
+    , filterName = "cmd_timeout_testing2"
+    , keyName = "key"
+    , timeout = 1
+    , filterOpts = {prob: 0.0001, capacity: 100000, in_memory:1}
+
+  var startTime = process.hrtime()
+  client.setSafeTimeout(filterName, keyName, function(err,res){
+    test.equals(err && err.message, "Timeout exceeded", "should have timed out")
+    bloom.timer(startTime, "Timed out after ")
+    client.dispose()
+    test.done()
+  }, filterOpts, timeout)
+
+}
 
 /**
  * Tests that an unavailable client rejects both queued commands

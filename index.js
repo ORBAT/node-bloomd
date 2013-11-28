@@ -63,6 +63,8 @@ function BloomClient(stream, options) {
   this.commandsSent = 0
   this.filterQueues = {}
 
+  this.timeout = options.timeout || 10
+
   var self = this
 
   stream.on('connect', function() {
@@ -332,15 +334,18 @@ BloomClient.prototype._buildBulkCommand = function (filterName, keys, callback) 
 
 
 /**
- * Safe versions of standard functions.
- * They appear on the prototype as setSafe, checkSafe, bulkSafe etc.
+ * Safe versions of standard functions, plus versions that support timeout.
+ * They appear on the prototype as setSafe, checkSafe, bulkSafe, setSafeTimeout, setTimeout etc.
  *
  * @see _makeSafe()
  */
 var _safeCommands = ['set', 'check', 'bulk', 'multi']
 for (var i = 0, l = _safeCommands.length; i < l; i++) {
   var commandName = _safeCommands[i]
-  BloomClient.prototype[commandName + 'Safe'] = _makeSafe(commandName)
+  var safeName = (commandName + 'Safe')
+  BloomClient.prototype[safeName] = _makeSafe(commandName)
+  BloomClient.prototype[safeName+"Timeout"] = _makeTimeout(safeName)
+  BloomClient.prototype[commandName+"Timeout"] = _makeTimeout(commandName)
 }
 
 // Extended Commands
@@ -710,6 +715,40 @@ BloomClient.prototype._clearFilterQueue = function (filterName) {
 
 // Helper Functions
 
+function isNumber(n) {
+  return !isNaN(parseFloat(n)) && isFinite(n);
+}
+
+/**
+ * Returns a function which adds a timeout to the original function's callback
+ * @param commandName
+ * @returns {Function}
+ * @private
+ */
+function _makeTimeout(commandName) {
+  return function() {
+    var self = this
+    var args = Array.prototype.slice.call(arguments)
+    //TODO(tom) check whether the last argument is a number or not
+    var timeout = args.pop()
+    if(!isNumber(timeout)) {
+      throw new Error("weird timeout " + timeout)
+    }
+    var numArgs = args.length
+    /* the callback is either the last parameter (in the case of non-safe commands) or the second to last (when
+     * filter creation options are passed to safe commands) */
+    var last = args[numArgs - 1]
+    if(last instanceof Function) {
+      args[numArgs - 1] = ensured(last, timeout)
+    } else {
+      //TODO(tom) error checking
+      args[numArgs - 2] = ensured(args[numArgs - 2], timeout)
+    }
+    self[commandName].apply(self, args);
+  }
+}
+
+
 /**
  * Returns a function which is a 'safe' version of the command with the supplied name. That is, if
  * the filter doesn't exist when the command is run, attempts to automatically create
@@ -719,7 +758,7 @@ BloomClient.prototype._clearFilterQueue = function (filterName) {
  * failure, not the original 'filter not found', to help track down why the creation
  * would be failing.
  *
- * @param {string} command
+ * @param {string} commandName
  * @return {Function}
  */
 function _makeSafe(commandName) {
@@ -841,10 +880,10 @@ exports.createClient = function (options, cb) {
     return new BloomClient(netClient, options)
   }
 
-  var creationCb;
+  var creationCb
   if (!options.connectTimeout) {
     creationCb = function () {
-      var bloomClient = new BloomClient(netClient, options);
+      var bloomClient = new BloomClient(netClient, options)
       // call _onConnect manually since it normally relies on the "connected" event which has already fired
       bloomClient._onConnect()
       cb(null, bloomClient)
@@ -852,10 +891,11 @@ exports.createClient = function (options, cb) {
   } else {
     creationCb = ensured(function (err) {
       if (err) {
-        if (netClient) netClient.end()
+        // if a socket was created, destroy it
+        if (netClient) netClient.destroy()
         cb(err, null)
       } else {
-        var bloomClient = new BloomClient(netClient, options);
+        var bloomClient = new BloomClient(netClient, options)
         bloomClient._onConnect()
         cb(null, bloomClient)
       }
@@ -864,6 +904,6 @@ exports.createClient = function (options, cb) {
 
   netClient = net.createConnection(options.port, options.host, creationCb)
 
-};
+}
 
 exports.timer = _timer

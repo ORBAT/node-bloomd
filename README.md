@@ -64,6 +64,23 @@ A number of config options are available for the client:
 * ```debug [false]```: Outputs debug information to the log.
 * ```reconnectDelay [160]```: The base amount of time in ms to wait between reconnection attempts. This number is multiplied by the current count of reconnection attempts to give a measure of backoff.
 * ```maxConnectionAttempts [0]```: The amount of times to try to get a connection to bloomd, after which the client will declare itself unavailable. 0 means no limit.
+* `connectTimeout [0]`: Optional timeout in milliseconds when creating the client asynchronously. 0 means no timeout.
+
+
+Asynchronous client creation
+------------------
+`createClient` can also be used asynchronously by passing a callback function with the signature `function(err,client)`
+ as the last parameter. A connection timeout can be specified with the `connectTimeout` option.
+ ```js
+   var bloomd = require('./index'),
+       client = bloomd.createClient({connectTimeout: 100}, function(err,client){
+         [...]
+       })
+ ```
+
+
+
+
 
 Memorable Commands
 ------------------
@@ -125,6 +142,22 @@ the reason that the safe command failed (which would be, in all cases "Filter do
 subsequent commands that were also queued will still fail with "Filter does not exist".
 
 Finally, 'safe' is a terrible designation, and I welcome suggestions for a better name.
+
+Commands with timeouts
+-----------
+The commands `set`, `check`, `bulk`, or `multi` (and their "safe" counterparts) also have
+versions that time out. Simply append `Timeout` to the end of the command and supply the timeout in milliseconds
+as the last parameter:
+
+```js
+    client.checkTimeout("filterName", "key", function(err,res){...}, 10)
+
+    client.setSafeTimeout("anotherFilter", "key", function(err,res){...},
+                          {prob: 0.0001, capacity: 100000, in_memory:1}, 10)
+```
+
+Error checking is currently minimal at best.
+
 
 Still To Do
 -----------
