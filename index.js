@@ -901,8 +901,8 @@ exports.createClient = function (options, cb) {
       }
     }, options.connectTimeout)
   }
-
-  netClient = net.createConnection(options.port, options.host, creationCb)
+  // TODO FIXME: if maxConnectionAttempts > 1, the callback seems to get called every time the server tries to reconnect.
+  netClient = net.createConnection(options.port, options.host, creationCb).on('error', function(err){creationCb(err)})
 
 }
 
