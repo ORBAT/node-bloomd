@@ -47,18 +47,18 @@ function _stopServer() {
 
 exports.asyncCreationErrors = function(test) {
   var run = 0
-  , client = null
-  //TODO: fix this test & fix the callback getting called multiple times
   var reconnectDelay = 10
   var maxConnectionAttempts = 2
   bloom.createClient({maxConnectionAttempts: maxConnectionAttempts, reconnectDelay: reconnectDelay}, function(err,client){
     run++
-    console.log("in createClient callback, run = " + run)
+    console.log("in createClient callback, run = %d, err = %s", run, err)
     if(run == 1) {
       setTimeout(function () {
+        var error = err
         console.log("")
         test.ok(run == 1)
-        test.done();
+        test.ok(err.errno && err.errno == "ECONNREFUSED", "should have gotten ECONNREFUSED")
+        test.done()
       }, reconnectDelay * maxConnectionAttempts * 2) // just to be on the safe side
     }
   })
@@ -146,7 +146,7 @@ exports.connectionCbTimeout = function (test) {
     return createdSocket
   }
 
-  bloom.createClient({connectTimeout: 1}, function (err, client) {
+  bloom.createClient({connectTimeout: 1, maxConnectionAttempts:1}, function (err, client) {
     console.log("createClient returned err " + err + " client " + client)
     test.ok(!client, "no client should have been returned")
     test.ok(err, "there should be something in err")
@@ -276,13 +276,23 @@ exports.timeout = function(test) {
   var client = bloom.createClient()
     , filterName = "cmd_timeout_testing2"
     , keyName = "key"
-    , timeout = 1
+    , timeout = 10
     , filterOpts = {prob: 0.0001, capacity: 100000, in_memory:1}
+
+
+  var origSend = client._send
+  client._send = function() {
+    var origArgs = arguments
+    setTimeout(function(){
+      origSend.apply(client, origArgs)
+    }, 50)
+  }
+
 
   var startTime = process.hrtime()
   client.setSafeTimeout(filterName, keyName, function(err,res){
     test.equals(err && err.message, "Timeout exceeded", "should have timed out")
-    bloom.timer(startTime, "Timed out after ")
+    bloom.timer(startTime, "Timed out after")
     client.dispose()
     test.done()
   }, filterOpts, timeout)
