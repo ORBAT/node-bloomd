@@ -73,13 +73,12 @@ Asynchronous client creation
  as the last parameter. A connection timeout can be specified with the `connectTimeout` option.
  ```js
    var bloomd = require('./index'),
-       client = bloomd.createClient({connectTimeout: 100}, function(err,client){
+       client = bloomd.createClient({connectTimeout: 100, maxConnectionAttempts:3}, function(err,client){
          [...]
        })
  ```
 
-
-
+Note that the callback will *never* be called if maxConnectionAttempts is 0 and the client keeps on reconnecting
 
 
 Memorable Commands

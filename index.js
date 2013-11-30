@@ -837,6 +837,15 @@ function _timer(since, message) {
   return elapsed
 }
 
+function TimeoutError(message) {
+  this.message = message;
+}
+
+TimeoutError.prototype = new Error()
+TimeoutError.prototype.constructor = Error
+
+exports.TimeoutError = TimeoutError
+
 function ensured(fn, timeout) {
   var timer
 
@@ -871,6 +880,31 @@ exports.BloomClient = BloomClient
  */
 exports.createClient = function (options, cb) {
   var netClient
+  var bloomClient
+  function wrappedCb(err) {
+
+    if(!bloomClient) bloomClient = new BloomClient(netClient, options)
+
+    if (err) {
+      // we don't want to call the callback if we still have connection attempts left. It also shouldn't be called if
+      // maxConnectionAttempts is 0 (which means the client will try to reconnect infinitely)
+      if (bloomClient.maxConnectionAttempts && bloomClient.connectionAttempts < bloomClient.maxConnectionAttempts ||
+          bloomClient.maxConnectionAttempts === 0) {
+        if (options.debug) console.log("async createClient reconnection attempt %d/%d",
+                                       bloomClient.connectionAttempts, bloomClient.maxConnectionAttempts);
+        return;
+      }
+      if(options.debug) console.log("Async createClient failed with error: " + err)
+      // if a socket was created, destroy it
+      if (netClient) netClient.destroy()
+      if (bloomClient) bloomClient.dispose()
+      cb(err, null)
+    } else {
+      if(options.debug) console.log("Async createClient new BloomClient")
+      bloomClient._onConnect()
+      cb(null, bloomClient)
+    }
+  }
   options = options || {}
   options.host = options.host || defaultHost
   options.port = options.port || defaultPort
@@ -882,28 +916,13 @@ exports.createClient = function (options, cb) {
 
   var creationCb
   if (!options.connectTimeout) {
-    creationCb = function () {
-      var bloomClient = new BloomClient(netClient, options)
-      // call _onConnect manually since it normally relies on the "connected" event which has already fired
-      bloomClient._onConnect()
-      cb(null, bloomClient)
-    }
+    creationCb = wrappedCb
   } else {
-    creationCb = ensured(function (err) {
-      if (err) {
-        // if a socket was created, destroy it
-        if (netClient) netClient.destroy()
-        cb(err, null)
-      } else {
-        var bloomClient = new BloomClient(netClient, options)
-        bloomClient._onConnect()
-        cb(null, bloomClient)
-      }
-    }, options.connectTimeout)
+    creationCb = ensured(wrappedCb, options.connectTimeout)
   }
-  // TODO FIXME: if maxConnectionAttempts > 1, the callback seems to get called every time the server tries to reconnect.
-  netClient = net.createConnection(options.port, options.host, creationCb).on('error', function(err){creationCb(err)})
 
+  netClient = net.createConnection(options.port, options.host, creationCb)
+  netClient.on('error', function (err) {creationCb(err)})
 }
 
 exports.timer = _timer
