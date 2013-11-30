@@ -45,6 +45,25 @@ function _stopServer() {
   sleep(SERVER_START_STOP_TIME)
 }
 
+exports.asyncCreationErrors = function(test) {
+  var run = 0
+  , client = null
+  //TODO: fix this test & fix the callback getting called multiple times
+  var reconnectDelay = 10;
+  var maxConnectionAttempts = 2;
+  bloom.createClient({maxConnectionAttempts: maxConnectionAttempts, reconnectDelay: reconnectDelay}, function(err,client){
+    run++
+    console.log("in createClient callback, run = " + run)
+    if(run == 1) {
+      setTimeout(function () {
+        console.log("")
+        test.ok(run == 1)
+        test.done();
+      }, reconnectDelay * maxConnectionAttempts * 2) // just to be on the safe side
+    }
+  })
+}
+
 /**
  * ensured wraps a callback function(err,res) with a setTimeout so that if it is not executed in the specified timeout,
  * it is called with an Error instance in the first parameter. This test verifies that the timeout actually happens
@@ -191,6 +210,7 @@ exports.timeoutCommands = function (test) {
   var client = bloom.createClient()
     , filterName = "cmd_timeout_testing"
     , keyName = "key"
+    , multiKey = "multiKey"
     , timeout = 10
     , filterOpts = {prob: 0.0001, capacity: 100000, in_memory:1}
 
@@ -219,6 +239,22 @@ exports.timeoutCommands = function (test) {
       client.checkTimeout(filterName, keyName+"2",function(err,res){
         cb(err, !res) // the key shouldn't exist
       }, timeout)
+    }
+    , multiCheckTest: function(cb) {
+      var keys = _.map(_.range(0, 10), function(elem){
+        return multiKey + elem
+      })
+
+      console.log("Setting keys " + keys.join(', '))
+
+      client.bulkSet(filterName, keys, function(err,res){
+        test.ifError(err)
+        client.multiTimeout(filterName, keys, function(err,res){
+          var values = _.values(res);
+          console.dir(res)
+          cb(err, values.length > 0 && values.every(function(elem){return elem}))
+        }, timeout)
+      })
     }
   }
 
