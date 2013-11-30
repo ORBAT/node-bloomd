@@ -49,8 +49,8 @@ exports.asyncCreationErrors = function(test) {
   var run = 0
   , client = null
   //TODO: fix this test & fix the callback getting called multiple times
-  var reconnectDelay = 10;
-  var maxConnectionAttempts = 2;
+  var reconnectDelay = 10
+  var maxConnectionAttempts = 2
   bloom.createClient({maxConnectionAttempts: maxConnectionAttempts, reconnectDelay: reconnectDelay}, function(err,client){
     run++
     console.log("in createClient callback, run = " + run)
@@ -142,7 +142,7 @@ exports.connectionCbTimeout = function (test) {
   net.createConnection = function() {
     console.log("sleeping for ~1 second")
     sleep(1)
-    createdSocket = origCreate.apply(null, Array.prototype.slice.call(arguments));
+    createdSocket = origCreate.apply(null, Array.prototype.slice.call(arguments))
     return createdSocket
   }
 
@@ -162,7 +162,7 @@ function clientTesting(client, test, filterName) {
   filterName = filterName || "timeout_tests"
     client.setSafe(filterName, "timeout_key", function (err, res) {
       console.log("setSafe done, res = " + res + " err = " + err)
-      test.ifError(err);
+      test.ifError(err)
       test.ok(res, "timeout_key should not have existed")
       client.check(filterName, "timeout_key", function (err, res) {
         console.log("check done, res = " + res + " err = " + err)
@@ -250,7 +250,7 @@ exports.timeoutCommands = function (test) {
       client.bulkSet(filterName, keys, function(err,res){
         test.ifError(err)
         client.multiTimeout(filterName, keys, function(err,res){
-          var values = _.values(res);
+          var values = _.values(res)
           console.dir(res)
           cb(err, values.length > 0 && values.every(function(elem){return elem}))
         }, timeout)
@@ -261,7 +261,7 @@ exports.timeoutCommands = function (test) {
   async.series(testFns, function (err, res) {
     console.dir(err)
     console.dir(res)
-    test.ifError(err);
+    test.ifError(err)
     var results = _.values(res).every(function (elem) {return !!elem})
     test.ok(results, "all tests should have returned true: " + _.values(res).join(', '))
     client.dispose()
