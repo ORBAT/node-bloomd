@@ -840,9 +840,7 @@ function _timer(since, message) {
 function TimeoutError(message) {
   this.message = message;
 }
-
-TimeoutError.prototype = new Error()
-TimeoutError.prototype.constructor = Error
+util.inherits(TimeoutError, Error)
 
 exports.TimeoutError = TimeoutError
 
