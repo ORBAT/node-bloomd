@@ -54,10 +54,9 @@ exports.asyncCreationErrors = function(test) {
     console.log("in createClient callback, run = %d, err = %s", run, err)
     if(run == 1) {
       setTimeout(function () {
-        var error = err
         console.log("")
         test.ok(run == 1)
-        test.ok(err.errno && err.errno == "ECONNREFUSED", "should have gotten ECONNREFUSED")
+        test.ok(err && err.errno && err.errno == "ECONNREFUSED", "should have gotten ECONNREFUSED")
         test.done()
       }, reconnectDelay * maxConnectionAttempts * 2) // just to be on the safe side
     }

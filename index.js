@@ -4,11 +4,19 @@
 var net = require('net'),
     events = require('events'),
     stream = require('stream'),
-    ResponseParser = require('./lib/responseParser').ResponseParser,
-    responseTypes = ResponseParser.responseTypes
+    ResponseParser,
     util = require('util'),
     defaultPort = 8673,
     defaultHost = '127.0.0.1'
+try {
+  ResponseParser = require('./lib/responseParser').ResponseParser
+  responseTypes = ResponseParser.responseTypes
+} catch(e) {
+  console.warn("Error when requiring ResponseParser; are you running Node 0.10?")
+  ResponseParser = function(){}
+  responseTypes = {}
+}
+
 
 /**
  * A client for BloomD (https://github.com/armon/bloomd)
