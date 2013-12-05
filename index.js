@@ -867,7 +867,7 @@ function ensured(fn, timeout) {
   timer = setTimeout(function () {
     clearTimeout(timer)
     timer = null
-    fn.call(fn, new Error("Timeout exceeded"))
+    fn.call(fn, new TimeoutError("Timeout exceeded"))
   }, timeout)
   return cb
 }

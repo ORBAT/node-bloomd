@@ -72,6 +72,7 @@ exports.ensuredTimeout = function(test) {
     test.ok(err)
     test.equals(err.message, "Timeout exceeded")
     test.ifError(res)
+    test.ok(err instanceof bloom.TimeoutError, "err is of the wrong type " + Object.prototype.toString.call(err))
     test.done()
   }, 1)
   sleep(1)
