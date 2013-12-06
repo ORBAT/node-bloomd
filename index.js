@@ -448,7 +448,7 @@ BloomClient.prototype._onReadable = function () {
  */
 BloomClient.prototype._onConnect = function () {
   if (this.options.debug) {
-    console.log('Connected to ' + this.options.host + ':' + this.options.port)
+    exports.logger.log('Connected to ' + this.options.host + ':' + this.options.port)
   }
 
   this.unavailable = false
@@ -896,17 +896,17 @@ exports.createClient = function (options, cb) {
       // maxConnectionAttempts is 0 (which means the client will try to reconnect infinitely)
       if (bloomClient.maxConnectionAttempts && bloomClient.connectionAttempts < bloomClient.maxConnectionAttempts ||
           bloomClient.maxConnectionAttempts === 0) {
-        if (options.debug) console.log("async createClient reconnection attempt %d/%d",
+        if (options.debug) exports.logger.log("async createClient reconnection attempt %d/%d",
                                        bloomClient.connectionAttempts, bloomClient.maxConnectionAttempts);
         return;
       }
-      if(options.debug) console.log("Async createClient failed with error: " + err)
+      exports.logger.error("Async createClient failed with error: " + err)
       // if a socket was created, destroy it
       if (netClient) netClient.destroy()
       if (bloomClient) bloomClient.dispose()
       cb(err, null)
     } else {
-      if(options.debug) console.log("Async createClient new BloomClient")
+      if(options.debug) exports.logger.log("Async createClient new BloomClient")
       bloomClient._onConnect()
       cb(null, bloomClient)
     }
@@ -931,4 +931,5 @@ exports.createClient = function (options, cb) {
   netClient.on('error', function (err) {creationCb(err)})
 }
 
+exports.logger = console
 exports.timer = _timer
